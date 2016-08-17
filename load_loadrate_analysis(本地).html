@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv = "X-UA-Compatible" content = "IE = edge" charset = "UTF-8"/> 
+		<title>Load And LoadRate Analysis</title>
+		<link rel = "stylesheet" href = "../src/main/webapp/pages/css/wanma.css"/>
+		<link rel = "stylesheet" href = "../src/main/webapp/tools/easyui/themes/default/easyui.css"/>
+		<link rel = "stylesheet" href = "../src/main/webapp/tools/easyui/themes/icon.css"/>
+		
+		<script type = "text/javascript" src = "../src/main/webapp/tools/tssJS/tssJS.all.js"></script>
+		
+		<script type = "text/javascript" src = "../src/main/webapp/tools/easyui/jquery.min.js"></script>
+		<script type = "text/javascript" src = "../src/main/webapp/tools/easyui/jquery.easyui.min.js"></script>
+		<script type = "text/javascript" src = "../src/main/webapp/tools/easyui/easyui-lang-zh_CN.js"></script>
+		
+		<script type = "text/javascript" src = "../src/main/webapp/more/bi_template/common.js"></script>
+		<script type = "text/javascript" src = "../src/main/webapp/pages/js/common.js"></script>
+		<style type = "text/css">
+			html, body {
+				height: 100%;
+			}
+		
+			.radio_div{    
+				position: absolute;
+				z-index: 99;
+				left: 65%;
+				top: 5px;
+			}
+
+			#save1, #save2 {
+				position: absolute;
+				top: 5px;
+				right: 0;
+				z-index: 99;
+			}
+			
+			#tip {
+				color: red;
+				position: absolute;
+				z-index: 99;
+				right: 5%;
+				top: 8px;
+			}
+			a:hover{
+				cursor: pointer;
+			}
+		</style>
+		<script type = "text/javascript">
+		
+			var data1, data2, data3, data4,
+				method = "POST", 
+			    DATA_URL_1 = "http://10.9.45.68:8080/tss/data/json/2200", //总运力月度统计
+				DATA_URL_2 = "http://10.9.45.68:8080/tss/data/json/2315", //装载率及环比数据月度统计
+				DATA_URL_3 = "http://10.9.45.68:8080/tss/data/json/2214", //各省区运力分析
+				DATA_URL_4 = "http://10.9.45.68:8080/tss/data/json/2245", //各省区装载率分析
+			    params = {"param1": "2016-06-01", "param2": "2016-08-15"};
+			var t1 = params.param1.replace(/-/g, "").substr(0,6),
+				t2 = params.param2.replace(/-/g, "").substr(0,6);
+				ts = t1+t2;
+			
+			$(function(){
+			
+				$('#win').window('close'); //初始窗口关闭
+				
+				tssJS.ajax({
+					url: DATA_URL_1,
+					params: params,
+					method: method,
+					type: "json",
+					waiting: true,
+					ondata: function(){
+						data1 =  this.getResponseJSON();
+						var func1 = SumLoad(data1);
+						$("#genaral").datagrid({
+							fit: true,
+							title: "总运力月度统计",
+							frozenColumns:[[func1[0][0]]],
+							columns: [func1[0].slice(1)],
+							data: func1[1]
+						});
+						
+						$('#save1').click(function(){
+							$(this)[0].download = ts+"总运力月度统计.csv"
+							this.href = "data:text/csv;charset=utf-8,\ufeff" + encodeURIComponent(func1[2]);
+						});	
+					}
+				});
+				
+				tssJS.ajax({
+					url: DATA_URL_2,
+					params: params,
+					method: method,
+					type: "json",
+					waiting: true,
+					ondata: function(){
+						data2 =  this.getResponseJSON();
+					/*
+						var func2 = SumLoadRate(data2);
+						$("#genaral").datagrid({
+							fit: true,
+							title: "装载率及环比数据月度统计",
+							frozenColumns:[[func2[0][0]]],
+							columns: [func2[0].slice(1)],
+							data: func2[1]
+						});
+						$('#save2').click(function(){
+							$(this)[0].download = "装载率及环比数据月度统计.csv"//params.param1.replace(/-/g, "")+params.param2.replace(/-/g, "")+"装载率及环比数据月度统计.csv";
+							this.href = "data:text/csv;charset=utf-8,\ufeff" + encodeURIComponent(func2[2]);
+						});	*/
+					}
+				});
+				
+				tssJS.ajax({
+					url: DATA_URL_3,
+					params: params,
+					method: method,
+					type: "json",
+					waiting: true,
+					ondata: function(){
+						data3 =  this.getResponseJSON();
+					var	title = TableTitle(data3);
+					var line = load_per(data3, "new_load", "new_sumload", "短途运力", 2, 1,1); //短途运力占比
+					var datajoin = ShowTable(data3, "new_load","长途运力", 1, 1,1).concat(ShowTable(data3, "new_load","短途运力", 2, 1,1), ShowTable(data3, "new_sumload","运力汇总", 0, 1,1),load_per(data3, "new_load", "new_sumload", "长途运力", 1, 1,1),line[line.length-1],load_diff(data3, "diff_load","old_load","运力环比(长途)", 1),load_diff(data3, "diff_load","old_load","运力环比(短途)", 2),load_diff(data3, "diff_sum_load","old_sumload","运力环比(总计)", 0))
+						$("#detail").datagrid({
+							fit: true,
+							title: "各省区月度运力统计",
+							frozenColumns:[title[0]],
+							columns: [title[1]],
+							rowStyler: function(index,row){
+										if(row["month"].indexOf("个月") != -1){
+											return 'background: #ddf0ed'
+										}
+									},
+							data: datajoin,
+							onLoadSuccess: function(data){
+								var tb = $(".datagrid-header-row td");
+								tb.each(function(i, n){
+									var f = $(n).attr("field")
+									//f返回field_value,截取表示所属集团部分
+									if(f.indexOf("prov") != -1 && f.substr(4,1)%2 != 0){
+										$(n).css("background", "#ffe957");
+									};
+								})
+							}
+						});
+						$('#save3').click(function(){
+							$(this)[0].download = ts+"各省区月度运力统计.csv"
+							this.href = "data:text/csv;charset=utf-8,\ufeff" + encodeURIComponent(download_str(data3, datajoin));
+					});		
+					}
+				});
+				
+				tssJS.ajax({
+					url: DATA_URL_4,
+					params: params,
+					method: method,
+					type: "json",
+					waiting: true,
+					ondata: function(){
+						data4 =  this.getResponseJSON();
+						/*
+						var	title = TableTitle(data4);
+						var datajoin = ShowTable(data4, "sum_rate","平均装载率", 0, 0, 0).concat(ShowTable(data4, "sum_diff_rate","平均装载率环比", 0, 0, 0, 0),ShowTable(data4, "rate","长途装载率", 1, 0, 0),ShowTable(data4, "diff_rate","长途装载率环比", 1, 0, 0));
+						$("#detail").datagrid({
+							fit: true,
+							title: "各省区装载率及环比月度统计",
+							frozenColumns: [title[0]],
+							columns: [title[1]],
+							data: datajoin
+						})*/
+					}
+				});
+				
+				$("#tip").click(function(){
+					$('#win').window('refresh', 'logical_exp.html');
+					$('#win').window('open');
+				});
+				
+				$("input[name='ger']").click(function(){
+					var s=$("input[name='ger']:checked").val();  
+					switch(s){ 
+					case "1" : 
+					var func1 = SumLoad(data1);
+						$("#genaral").datagrid({
+							fit: true,
+							title: "总运力月度统计",
+							frozenColumns:[[func1[0][0]]],
+							columns: [func1[0].slice(1)],
+							data: func1[1]
+						});
+						
+						$('#save1').click(function(){
+							$(this)[0].download = ts+"总运力月度统计.csv"
+							this.href = "data:text/csv;charset=utf-8,\ufeff" + encodeURIComponent(func1[2]);
+						});	
+						
+					break; 
+					case "2" : 
+					var func2 = SumLoadRate(data2);
+						$("#genaral").datagrid({
+							fit: true,
+							title: "装载率及环比数据月度统计",
+							frozenColumns:[[func2[0][0]]],
+							columns: [func2[0].slice(1)],
+							data: func2[1]
+						});
+						$('#save1').click(function(){
+							$(this)[0].download = ts+"装载率及环比数据月度统计.csv"
+							this.href = "data:text/csv;charset=utf-8,\ufeff" + encodeURIComponent(func2[2]);
+						});
+					break;}	
+				});
+				
+				
+				$("input[name='det']").click(function(){
+					var s=$("input[name='det']:checked").val();  
+					switch(s){ 
+					case "1" : 
+					var	title = TableTitle(data3);
+					var line = load_per(data3, "new_load", "new_sumload", "短途运力", 2, 1,1); //短途运力占比
+					var datajoin = ShowTable(data3, "new_load","长途运力", 1, 1,1).concat(ShowTable(data3, "new_load","短途运力", 2, 1,1), ShowTable(data3, "new_sumload","运力汇总", 0, 1,1),load_per(data3, "new_load", "new_sumload", "长途运力", 1, 1,1),line[line.length-1],load_diff(data3, "diff_load","old_load","运力环比(长途)", 1),load_diff(data3, "diff_load","old_load","运力环比(短途)", 2),load_diff(data3, "diff_sum_load","old_sumload","运力环比(总计)", 0))
+							$("#detail").datagrid({
+							fit: true,
+							title: "各省区月度运力统计",
+							frozenColumns:[title[0]],
+							columns: [title[1]],
+							data: datajoin
+						})	; 
+					$('#save2').click(function(){
+						$(this)[0].download = ts+"各省区月度运力统计.csv"
+						this.href = "data:text/csv;charset=utf-8,\ufeff" + encodeURIComponent(download_str(data3, datajoin));
+					});		
+					break; 
+					case "2" : 
+					var	title = TableTitle(data4);
+					var datajoin = ShowTable(data4, "sum_rate","平均装载率", 0, 0, 0).concat(ShowTable(data4, "sum_diff_rate","平均装载率环比", 0, 0, 0, 0),ShowTable(data4, "rate","长途装载率", 1, 0, 0),ShowTable(data4, "diff_rate","长途装载率环比", 1, 0, 0));
+					$("#detail").datagrid({
+						fit: true,
+						title: "各省区装载率及环比月度统计",
+						frozenColumns: [title[0]],
+						columns: [title[1]],
+						data: datajoin
+					}); 
+					
+					$('#save2').click(function(){
+						$(this)[0].download = ts+"各省区装载率及环比月度统计.csv"
+						this.href = "data:text/csv;charset=utf-8,\ufeff" + encodeURIComponent(download_str(data4, datajoin));
+					});	
+					break;}	
+				});
+				
+			});
+			
+			
+			
+			//省份集
+			function ProvSet(data){
+				var orgset = {}, j = 1;
+				var org_group = "";
+				for(var i = 0; i < data.length; i++){
+					if(!orgset.hasOwnProperty(data[i]["org"])){
+						if(org_group != data[i]["org_group"]){
+							j = '1';
+							org_group = data[i]["org_group"];
+						}
+						eval('orgset["'+data[i]["org"]+'"] ="'+data[i]["org_group"]+'_'+j+'"'); //区分各分公司所属集团
+						j++; 
+					}
+				}
+				return orgset;
+			}
+			
+			//表头
+			function TableTitle(data){
+				var orgset = ProvSet(data);
+				var f_cols = [{field: "month", title: "分公司", width: 150}], 
+					cols = [];
+			    for(var key in orgset){
+					cols.push({field: "prov"+ orgset[key], title: key, align: "right", width: 70, formatter: col_formatter});
+				}
+				cols.push({field: "prov", title: "总计", align: "right", width: 70, formatter: col_formatter})
+				
+				return [f_cols, cols]
+			}
+			
+			//cols需要统计的列，type为1表示长短途放在同一列中的统计长途，2表示统计短途，0表示统计整列
+			//footer，0表示不显示汇总，1表示显示汇总
+			//rw 是否需要行汇总，1需要，0不需要
+			function ShowTable(data, cols,cols_name, type, footer, rw){
+				var rows = [], temp = {}, colsum = {}, rowsum = 0, colsm = 0;
+				var orgset = ProvSet(data);
+				for(var i = 0; i < data.length; i++){
+					if(i == 0){
+						temp["month"] = data[i]["month"]+cols_name;
+						colsum["month"] = cols_name+"总计"; //列汇总
+						for(var key in orgset){
+							eval('colsum["prov'+orgset[key]+'"] = 0');
+						};
+					}else{
+						if(temp["month"] != data[i]["month"]+cols_name){
+							colsm += rowsum
+							if(rw == 1){
+								temp["prov"] = rowsum;  //行汇总
+							}else{
+								temp["prov"] = "";
+							}
+							rows.push(temp);
+							temp = {};
+							j = 0;
+							rowsum = 0;
+							temp["month"] = data[i]["month"]+cols_name;
+						}
+					};
+					if(type == 1){
+						if(data[i]["line"] == "长线"){
+							eval('temp["prov'+orgset[data[i]["org"]]+'"] = data[i][cols]');
+							eval('colsum["prov'+orgset[data[i]["org"]]+'"] += data[i][cols]');
+							rowsum += data[i][cols];
+						}
+					}else if(type == 2){
+						if(data[i]["line"] == "短线"){
+							eval('temp["prov'+orgset[data[i]["org"]]+'"] = data[i][cols]');
+							eval('colsum["prov'+orgset[data[i]["org"]]+'"] += data[i][cols]');
+							rowsum += data[i][cols];
+						}
+					}else{
+						eval('temp["prov'+orgset[data[i]["org"]]+'"] = data[i][cols]');
+						eval('colsum["prov'+orgset[data[i]["org"]]+'"] += data[i][cols]');
+						rowsum += data[i][cols];
+					}
+				}
+				
+				//最后一行行汇总
+				colsm += rowsum
+				if(rw == 1){
+					temp["prov"] = rowsum;  
+				}else{
+					temp["prov"] = "";
+				}
+				rows.push(temp);
+				
+				if(footer == 1){
+					colsum["month"] += "("+rows.length+"个月)"
+					if(rw == 1){
+						colsum["prov"] = colsm;
+					}else{
+						colsum["prov"] = "";
+					}
+					rows.push(colsum);
+				}
+				
+				return rows;
+			}
+			
+			//长途运力占比
+			//此处cols_name、type用来表示长途运力或短途运力的属性
+			function load_per(data, cols, cols_sum, cols_name, type, footer, rw){
+				var load = ShowTable(data, cols, cols_name, type, footer, rw);
+				var sumload = ShowTable(data, cols_sum, "运力汇总", 0, footer, rw);
+				var orgset = ProvSet(data);
+				var sum = [], temp = {};
+				for(var i = 0; i < load.length; i++){
+					if(i == load.length-1){
+						temp["month"] = load[i]["month"].replace("总计","占比");
+					}else{
+						temp["month"] = load[i]["month"]+"占比";
+					}
+					
+					for(var key in orgset){
+						eval('temp["prov'+orgset[key]+'"] = isNaN(load['+i+']["prov'+orgset[key]+'"]/sumload['+i+']["prov'+orgset[key]+'"])?"":Math.round(load['+i+']["prov'+orgset[key]+'"]/sumload['+i+']["prov'+orgset[key]+'"]*10000)/100+"%"');
+					};
+					if(rw == 1){
+						temp["prov"] = isNaN(load[i]["prov"]/sumload[i]["prov"])?"":Math.round(load[i]["prov"]/sumload[i]["prov"]*10000)/100+"%";
+						
+					}else{
+						temp["prov"] = "";
+						
+					}
+					sum.push(temp);
+					temp = {};
+				}
+				return sum;
+			}
+			
+			//运力环比计算
+			//cols为分子，cols_sum为分母
+			function load_diff(data, cols_diff, cols, cols_name, type){
+				var rows = [], temp = {}, row_diff_sum = 0, rowsum = 0;
+				var orgset = ProvSet(data);
+				for(var i = 0; i < data.length; i++){
+					if(i == 0){
+						temp["month"] = data[i]["month"]+cols_name;
+					}else{
+						if(temp["month"] != data[i]["month"]+cols_name){
+							if(rowsum != 0){
+								temp["prov"] = Math.round(row_diff_sum/rowsum*10000)/100+"%"; //行汇总
+							}else{
+								temp["prov"] = "";
+							}
+							
+							rows.push(temp);
+							temp = {};
+							j = 0;
+							row_diff_sum = 0;
+							rowsum = 0;
+							temp["month"] = data[i]["month"]+cols_name;
+						}
+					};
+					if(type == 1){
+						if(data[i]["line"] == "长线"){
+							if(data[i][cols] == null){
+								eval('temp["prov'+orgset[data[i]["org"]]+'"] = ""');
+							}else{
+								eval('temp["prov'+orgset[data[i]["org"]]+'"] = Math.round(data[i][cols_diff]/data[i][cols]*10000)/100+"%"');
+							}
+							row_diff_sum += data[i][cols_diff];
+							rowsum += data[i][cols];
+						}
+					}else if(type == 2){
+						if(data[i]["line"] == "短线"){
+							if(data[i][cols] == null){
+								eval('temp["prov'+orgset[data[i]["org"]]+'"] = ""');
+							}else{
+								eval('temp["prov'+orgset[data[i]["org"]]+'"] = Math.round(data[i][cols_diff]/data[i][cols]*10000)/100+"%"');
+							}
+							row_diff_sum += data[i][cols_diff];
+							rowsum += data[i][cols];
+						}
+					}else{
+						if(data[i][cols] == null){
+							eval('temp["prov'+orgset[data[i]["org"]]+'"] = ""');
+						}else{
+							eval('temp["prov'+orgset[data[i]["org"]]+'"] = Math.round(data[i][cols_diff]/data[i][cols]*10000)/100+"%"');
+						}
+						
+						row_diff_sum += data[i][cols_diff];
+						rowsum += data[i][cols];
+					}
+				}
+				
+				//最后一行行汇总
+				if(rowsum != 0){
+					temp["prov"] = Math.round(row_diff_sum/rowsum*10000)/100+"%";
+				}else{
+					temp["prov"] = "";
+				}
+				
+				rows.push(temp);
+				
+				return rows;
+			}
+			
+			//data直接传递过来，rows经过多个rows合并得到
+			function download_str(data, rows){
+				var orgset = ProvSet(data);
+				var str = "分公司"+",";
+				for(var key in orgset){
+					str += key+",";
+				}
+				str = str+"总计\n";
+				for(var i = 0; i < rows.length; i++){
+					str += rows[i]["month"]+",";
+					for(var key in orgset){
+						eval('str += ((rows[i]["prov'+orgset[key]+'"] == null)?"":rows[i]["prov'+orgset[key]+'"])+","');
+					};
+					
+					str += ((rows[i]["prov"] == undefined)?"":rows[i]["prov"])+"\n";
+				}
+				return str;
+			}
+			
+			//总运力月度统计
+			function SumLoad(data){
+				var monlist = [],title = [{field: "name", title: "名称", width: 100}],
+					rows, j = 0, str = "名称"+",";
+				var t1 = {"name": "长途运力"}, t2 = {"name": "短途运力"}, t3 = {"name": "总计"}, 
+					t4 = {"name": "长途运力占比"}, t5 = {"name": "变动运力"}, t6 = {"name": "环比"};
+				for(var i = 0; i < data.length; i++){
+					if(data[i]["line"] == "长线"){
+						title.push({field: "month"+ j, title: data[i]["month"], width: 70, align: "right"});
+						eval('t1["month'+j+'"] = data[i]["长短途运力"]');
+						eval('t3["month'+j+'"] = data[i]["总计"]');
+						eval('t4["month'+j+'"] = data[i]["长短途运力占比"]');
+						eval('t5["month'+j+'"] = data[i]["变动运力"]');
+						eval('t6["month'+j+'"] = data[i]["环比"]');
+						str += data[i]["month"] + ",";
+					}else{
+						eval('t2["month'+j+'"] = data[i]["长短途运力"]');
+						j++;
+					}
+				}
+				title.push({field: "total", title: "总计", width: 70, align: "right", formatter: col_formatter});
+				str = str+ "总计" + "\n";
+				
+				var ls = [t1, t2, t3, t4, t5, t6];
+				for(var i = 0; i < ls.length; i++){
+					if(i != 3 && i != 5){
+						ls[i]["total"] = 0;
+						for(var key in ls[i]){
+							if(key.indexOf("month") != -1){
+								ls[i]["total"] += ls[i][key];
+							}
+							str += ((ls[i][key] == null)?"":ls[i][key]) + ",";
+						}
+						str = str.substr(0, str.length-1) + "\n";
+					}else if(i == 3 || i == 5){
+						for(var key in ls[i]){
+							str += ((ls[i][key] == null)?"":ls[i][key]) + ",";
+						}
+						if(i == 3){
+							ls[i]["total"] = Math.round(ls[0]["total"]/ls[2]["total"]*10000)/100+"%";
+						}else{
+							ls[i]["total"] = "";
+						}
+						str += ((ls[i]["total"] == undefined)?"":ls[i]["total"])+"\n"
+					}	
+								
+				}
+					
+					//str = str.substr(0, str.length) + "\n";
+				
+				
+				rows = [t1, t2, t3, t4, t5, t6]
+				return [title, rows, str];
+			}
+			
+			//装载率及环比数据月度统计
+			function SumLoadRate(data){
+				var monlist = [],title = [{field: "name", title:"名称", width: 100}],
+					rows, str = "名称"+",";
+				var t1 = {"name": "平均装载率"}, t2 = {"name": "平均装载率环比"}, 
+					t3 = {"name": "长途装载率"}, t4 = {"name": "长途装载率环比"}
+				for(var i = 0; i < data.length; i++){
+					eval('t1["month'+i+'"] = data[i]["平均装载率"]');
+					eval('t2["month'+i+'"] = data[i]["平均装载率环比"]');
+					eval('t3["month'+i+'"] = data[i]["长途装载率"]');
+					eval('t4["month'+i+'"] = data[i]["长途装载率环比"]');
+					str += data[i]["month"]+",";
+					title.push({field: "month"+ i, title: data[i]["month"], width: 70, align: "right"});
+				}
+				
+				str = str.substr(0, str.length-1)+"\n";
+				var ls = [t1, t2, t3, t4];
+				for(var  i = 0; i < ls.length; i++){
+					for(var key in ls[i]){
+						str += ((ls[i][key]==null)?"":ls[i][key]) + ",";
+					}
+					str = str.substr(0, str.length-1)+"\n";
+				};
+				
+				rows = [t1, t2, t3, t4];
+				return [title, rows, str];
+			}
+				
+			function col_formatter(value, row, index){
+				if(value > 0){
+					return Math.round(value*100)/100;
+				}else{
+					return value;
+				}
+			}
+			
+			
+		</script>
+	<head>
+	<body>
+		<div id = "main" class = "easyui-layout" fit = "true">
+			<div id="win" class="easyui-window" title="计算逻辑说明" style="width:100%;height:100%" data-options="iconCls:'icon-save',modal:true">
+			</div>
+			<div data-options = "region:'north'" style = "height: 33%">
+				<a id = "tip">(计算逻辑说明)</a>
+				<a href="#" id="save1" class="easyui-linkbutton" data-options="plain:true,iconCls:'icon-save'">导出</a>
+				<div class = "radio_div">
+					<input type = "radio" name = "ger" value="1" checked = "checked"/>总运力月度统计
+					<input type = "radio" name = "ger" value = "2"/>装载率及环比数据月度统计
+				</div>
+				<table id = "genaral"></table>
+			</div>
+			<!--
+			<div data-options = "region: 'center'" style = "height:24%">
+				<a href="#" id="save2" class="easyui-linkbutton" data-options="plain:true,iconCls:'icon-save'">导出</a>
+				<table id = "sumloadrate"></table>
+			</div>-->
+			<div data-options = "region:'center'" style = "height: 67%">
+				<a href="#" id="save2" class="easyui-linkbutton" data-options="plain:true,iconCls:'icon-save'">导出</a>
+				<div class = "radio_div">
+					<input type = "radio" name = "det" value="1" checked = "checked"/>各省区运力分析
+					<input type = "radio" name = "det" value = "2"/>各省区装载率分析
+				</div>
+				<table id = "detail"></table>
+			</div>
+		</div>
+	</body>
+</html>
